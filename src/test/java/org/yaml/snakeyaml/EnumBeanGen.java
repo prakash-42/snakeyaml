@@ -14,13 +14,36 @@
  * limitations under the License.
  */
 
-package org.yaml.snakeyaml.recursive.generics;
+package org.yaml.snakeyaml;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.LinkedHashMap;
 
-public class HumanGen extends AbstractHumanGen<Set<HumanGen>, HumanGen> {
-    public HumanGen() {
-        children = new LinkedHashSet<HumanGen>();
+public class EnumBeanGen<T extends Enum<T>> {
+    private int id;
+    private Enum<T> suit;
+    private LinkedHashMap<T, Integer> map = new LinkedHashMap<T, Integer>();
+
+    public LinkedHashMap<T, Integer> getMap() {
+        return map;
+    }
+
+    public void setMap(LinkedHashMap<T, Integer> map) {
+        this.map = map;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public Enum<T> getSuit() {
+        return suit;
+    }
+
+    public void setSuit(T suit) {
+        this.suit = suit;
     }
 }
