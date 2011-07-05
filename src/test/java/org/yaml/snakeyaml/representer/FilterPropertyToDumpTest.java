@@ -16,7 +16,6 @@
 
 package org.yaml.snakeyaml.representer;
 
-import java.beans.IntrospectionException;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -94,8 +93,7 @@ public class FilterPropertyToDumpTest extends TestCase {
 
     private class MyRepresenter extends Representer {
         @Override
-        protected Set<Property> getProperties(Class<? extends Object> type)
-                throws IntrospectionException {
+        protected Set<Property> getProperties(Class<? extends Object> type) {
             Set<Property> set = super.getProperties(type);
             Set<Property> filtered = new TreeSet<Property>();
             if (type.equals(BeanToRemoveProperty.class)) {
