@@ -16,36 +16,64 @@
 
 package org.yaml.snakeyaml;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.introspector.PropertySubstitute;
+import org.yaml.snakeyaml.introspector.BeanAccess;
+import org.yaml.snakeyaml.introspector.Property;
+import org.yaml.snakeyaml.introspector.PropertyUtils;
+import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.Tag;
 
 /**
  * Provides additional runtime information necessary to create a custom Java
  * instance.
  */
-public final class TypeDescription {
+public class TypeDescription {
+
     private final Class<? extends Object> type;
+    private Class<?> impl;
+
     private Tag tag;
-    private Map<String, Class<? extends Object>> listProperties;
-    private Map<String, Class<? extends Object>> keyProperties;
-    private Map<String, Class<? extends Object>> valueProperties;
+
+    transient private Set<Property> dumpProperties = null;
+    transient private PropertyUtils propertyUtils;
+    transient private boolean delegatesChecked = false;
+
+    private Map<String, PropertySubstitute> properties = Collections.emptyMap();
+
+    protected Set<String> excludes = Collections.emptySet();
+    protected String[] includes = null;
+    protected BeanAccess beanAccess;
 
     public TypeDescription(Class<? extends Object> clazz, Tag tag) {
+        this(clazz, tag, null);
+    }
+
+    public TypeDescription(Class<? extends Object> clazz, Tag tag, Class<?> impl) {
         this.type = clazz;
         this.tag = tag;
-        listProperties = new HashMap<String, Class<? extends Object>>();
-        keyProperties = new HashMap<String, Class<? extends Object>>();
-        valueProperties = new HashMap<String, Class<? extends Object>>();
+        this.impl = impl;
+        beanAccess = null;
     }
 
     public TypeDescription(Class<? extends Object> clazz, String tag) {
-        this(clazz, new Tag(tag));
+        this(clazz, new Tag(tag), null);
     }
 
     public TypeDescription(Class<? extends Object> clazz) {
-        this(clazz, (Tag) null);
+        this(clazz, (Tag) null, null);
+    }
+
+    public TypeDescription(Class<? extends Object> clazz, Class<?> impl) {
+        this(clazz, null, impl);
     }
 
     /**
@@ -89,8 +117,9 @@ public final class TypeDescription {
      * @param type
      *            class of List values
      */
+    @Deprecated
     public void putListPropertyType(String property, Class<? extends Object> type) {
-        listProperties.put(property, type);
+        addPropertyParameters(property, type);
     }
 
     /**
@@ -100,8 +129,15 @@ public final class TypeDescription {
      *            property name
      * @return class of List values
      */
+    @Deprecated
     public Class<? extends Object> getListPropertyType(String property) {
-        return listProperties.get(property);
+        if (properties.containsKey(property)) {
+            Class<?>[] typeArguments = properties.get(property).getActualTypeArguments();
+            if (typeArguments != null && typeArguments.length > 0) {
+                return typeArguments[0];
+            }
+        }
+        return null;
     }
 
     /**
@@ -114,10 +150,10 @@ public final class TypeDescription {
      * @param value
      *            class of values in Map
      */
+    @Deprecated
     public void putMapPropertyType(String property, Class<? extends Object> key,
             Class<? extends Object> value) {
-        keyProperties.put(property, key);
-        valueProperties.put(property, value);
+        addPropertyParameters(property, key, value);
     }
 
     /**
@@ -127,8 +163,15 @@ public final class TypeDescription {
      *            property name of this JavaBean
      * @return class of keys in the Map
      */
+    @Deprecated
     public Class<? extends Object> getMapKeyType(String property) {
-        return keyProperties.get(property);
+        if (properties.containsKey(property)) {
+            Class<?>[] typeArguments = properties.get(property).getActualTypeArguments();
+            if (typeArguments != null && typeArguments.length > 0) {
+                return typeArguments[0];
+            }
+        }
+        return null;
     }
 
     /**
@@ -138,12 +181,195 @@ public final class TypeDescription {
      *            property name of this JavaBean
      * @return class of values in the Map
      */
+    @Deprecated
     public Class<? extends Object> getMapValueType(String property) {
-        return valueProperties.get(property);
+        if (properties.containsKey(property)) {
+            Class<?>[] typeArguments = properties.get(property).getActualTypeArguments();
+            if (typeArguments != null && typeArguments.length > 1) {
+                return typeArguments[1];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Adds new substitute for property <code>pName</code> parameterized by
+     * <code>classes</classes> to this <code>TypeDescription</code>. If
+     * <code>pName</code> has been added before - updates parameters with
+     * <code>classes</code>.
+     * 
+     * @param pName
+     * @param classes
+     */
+    public void addPropertyParameters(String pName, Class<?>... classes) {
+        if (!properties.containsKey(pName)) {
+            substituteProperty(pName, null, null, null, classes);
+        } else {
+            PropertySubstitute pr = properties.get(pName);
+            pr.setActualTypeArguments(classes);
+        }
+
     }
 
     @Override
     public String toString() {
         return "TypeDescription for " + getType() + " (tag='" + getTag() + "')";
+    }
+
+    private void checkDelegates() {
+        Collection<PropertySubstitute> values = properties.values();
+        for (PropertySubstitute p : values) {
+            try {
+                p.setDelegate(discoverProperty(p.getName()));
+            } catch (YAMLException e) {
+            }
+        }
+        delegatesChecked = true;
+    }
+
+    private Property discoverProperty(String name) {
+        if (propertyUtils != null) {
+            if (beanAccess == null) {
+                return propertyUtils.getProperty(type, name);
+            }
+            return propertyUtils.getProperty(type, name, beanAccess);
+        }
+        return null;
+    }
+
+    public Property getProperty(String name) {
+        if (!delegatesChecked) {
+            checkDelegates();
+        }
+        return properties.containsKey(name) ? properties.get(name) : discoverProperty(name);
+    }
+
+    /**
+     * Adds property substitute for <code>pName</code>
+     * 
+     * @param pName
+     *            property name
+     * @param pType
+     *            property type
+     * @param getter
+     *            method name for getter
+     * @param setter
+     *            method name for setter
+     * @param argParams
+     *            actual types for parameterized type (List<?>, Map<?>)
+     */
+    public void substituteProperty(String pName, Class<?> pType, String getter, String setter,
+            Class<?>... argParams) {
+        substituteProperty(new PropertySubstitute(pName, pType, getter, setter, argParams));
+    }
+
+    public void substituteProperty(PropertySubstitute substitute) {
+        if (Collections.EMPTY_MAP == properties) {
+            properties = new HashMap<String, PropertySubstitute>();
+        }
+        substitute.setTargetType(type);
+        properties.put(substitute.getName(), substitute);
+    }
+
+    public void setPropertyUtils(PropertyUtils propertyUtils) {
+        this.propertyUtils = propertyUtils;
+    }
+
+    /* begin: Representer */
+    public void setIncludes(String... propNames) {
+        this.includes = (propNames != null && propNames.length > 0) ? propNames : null;
+    }
+
+    public void setExcludes(String... propNames) {
+        if (propNames != null && propNames.length > 0) {
+            excludes = new HashSet<String>();
+            for (String name : propNames) {
+                excludes.add(name);
+            }
+        } else {
+            excludes = Collections.emptySet();
+        }
+    }
+
+    public Set<Property> getProperties() {
+        if (dumpProperties != null) {
+            return dumpProperties;
+        }
+
+        if (propertyUtils != null) {
+            if (includes != null) {
+                dumpProperties = new LinkedHashSet<Property>();
+                for (String propertyName : includes) {
+                    if (!excludes.contains(propertyName)) {
+                        dumpProperties.add(getProperty(propertyName));
+                    }
+                }
+                return dumpProperties;
+            }
+
+            final Set<Property> readableProps = (beanAccess == null) ? propertyUtils
+                    .getProperties(type) : propertyUtils.getProperties(type, beanAccess);
+
+            if (properties.isEmpty()) {
+                if (excludes.isEmpty()) {
+                    return dumpProperties = readableProps;
+                }
+                dumpProperties = new LinkedHashSet<Property>();
+                for (Property property : readableProps) {
+                    if (!excludes.contains(property.getName())) {
+                        dumpProperties.add(property);
+                    }
+                }
+                return dumpProperties;
+            }
+
+            if (!delegatesChecked) {
+                checkDelegates();
+            }
+
+            dumpProperties = new LinkedHashSet<Property>();
+            for (Property property : readableProps) {
+                if (!excludes.contains(property.getName())) {
+                    if (properties.containsKey(property.getName())) {
+                        dumpProperties.add(properties.get(property.getName()));
+                    } else {
+                        dumpProperties.add(property);
+                    }
+                }
+            }
+            return dumpProperties;
+        }
+        return null;
+    }
+
+    /* end: Representer */
+
+    /*------------ Maybe something useful to override :) ---------*/
+
+    public boolean setupPropertyType(String key, Node valueNode) {
+        return false;
+    }
+
+    public boolean setProperty(Object targetBean, String propertyName, Object value)
+            throws Exception {
+        return false;
+    }
+
+    public Object newInstance(Node node) {
+        if (impl != null) {
+            try {
+                java.lang.reflect.Constructor<?> c = impl.getDeclaredConstructor();
+                c.setAccessible(true);
+                return c.newInstance();
+            } catch (Exception e) {
+                e.printStackTrace();
+                impl = null;
+            }
+        }
+        return null;
+    }
+
+    public Object newInstance(String propertyName, Node node) {
+        return null;
     }
 }
