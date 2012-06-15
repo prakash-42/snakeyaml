@@ -411,7 +411,8 @@ public class SafeConstructor extends BaseConstructor {
     public class ConstructYamlSet implements Construct {
         public Object construct(Node node) {
             if (node.isTwoStepsConstruction()) {
-                return createDefaultSet();
+                return (constructedObjects.containsKey(node) ? constructedObjects.get(node)
+                        : createDefaultSet());
             } else {
                 return constructSet((MappingNode) node);
             }
@@ -437,7 +438,7 @@ public class SafeConstructor extends BaseConstructor {
         public Object construct(Node node) {
             SequenceNode seqNode = (SequenceNode) node;
             if (node.isTwoStepsConstruction()) {
-                return createDefaultList((seqNode.getValue()).size());
+                return newList(seqNode);
             } else {
                 return constructSequence(seqNode);
             }
