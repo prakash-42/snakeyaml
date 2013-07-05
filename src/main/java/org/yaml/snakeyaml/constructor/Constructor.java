@@ -15,22 +15,15 @@
  */
 package org.yaml.snakeyaml.constructor;
 
-import java.beans.IntrospectionException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
-import java.util.SortedMap;
-import java.util.SortedSet;
-import java.util.TreeMap;
-import java.util.TreeSet;
 
 import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.error.YAMLException;
@@ -47,8 +40,6 @@ import org.yaml.snakeyaml.nodes.Tag;
  * Construct a custom Java instance.
  */
 public class Constructor extends SafeConstructor {
-    private final Map<Tag, Class<? extends Object>> typeTags;
-    protected final Map<Class<? extends Object>, TypeDescription> typeDefinitions;
 
     public Constructor() {
         this(Object.class);
@@ -82,8 +73,6 @@ public class Constructor extends SafeConstructor {
         if (!Object.class.equals(theRoot.getType())) {
             rootTag = new Tag(theRoot.getType());
         }
-        typeTags = new HashMap<Tag, Class<? extends Object>>();
-        typeDefinitions = new HashMap<Class<? extends Object>, TypeDescription>();
         yamlClassConstructors.put(NodeId.scalar, new ConstructScalar());
         yamlClassConstructors.put(NodeId.mapping, new ConstructMapping());
         yamlClassConstructors.put(NodeId.sequence, new ConstructSequence());
@@ -114,25 +103,6 @@ public class Constructor extends SafeConstructor {
     }
 
     /**
-     * Make YAML aware how to parse a custom Class. If there is no root Class
-     * assigned in constructor then the 'root' property of this definition is
-     * respected.
-     * 
-     * @param definition
-     *            to be added to the Constructor
-     * @return the previous value associated with <tt>definition</tt>, or
-     *         <tt>null</tt> if there was no mapping for <tt>definition</tt>.
-     */
-    public TypeDescription addTypeDescription(TypeDescription definition) {
-        if (definition == null) {
-            throw new NullPointerException("TypeDescription is required.");
-        }
-        Tag tag = definition.getTag();
-        typeTags.put(tag, definition.getType());
-        return typeDefinitions.put(definition.getType(), definition);
-    }
-
-    /**
      * Construct mapping instance (Map, JavaBean) when the runtime class is
      * known.
      */
@@ -149,44 +119,24 @@ public class Constructor extends SafeConstructor {
          */
         public Object construct(Node node) {
             MappingNode mnode = (MappingNode) node;
-            if (Properties.class.isAssignableFrom(node.getType())) {
-                Properties properties = new Properties();
-                if (!node.isTwoStepsConstruction()) {
-                    constructMapping2ndStep(mnode, properties);
-                } else {
-                    throw new YAMLException("Properties must not be recursive.");
-                }
-                return properties;
-            } else if (SortedMap.class.isAssignableFrom(node.getType())) {
-                SortedMap<Object, Object> map = new TreeMap<Object, Object>();
-                if (!node.isTwoStepsConstruction()) {
-                    constructMapping2ndStep(mnode, map);
-                }
-                return map;
-            } else if (Map.class.isAssignableFrom(node.getType())) {
+            if (Map.class.isAssignableFrom(node.getType())) {
                 if (node.isTwoStepsConstruction()) {
-                    return createDefaultMap();
+                    return newMap(mnode);
                 } else {
                     return constructMapping(mnode);
                 }
-            } else if (SortedSet.class.isAssignableFrom(node.getType())) {
-                SortedSet<Object> set = new TreeSet<Object>();
-                // XXX why this is not used ?
-                // if (!node.isTwoStepsConstruction()) {
-                constructSet2ndStep(mnode, set);
-                // }
-                return set;
             } else if (Collection.class.isAssignableFrom(node.getType())) {
                 if (node.isTwoStepsConstruction()) {
-                    return createDefaultSet();
+                    return newSet(mnode);
                 } else {
                     return constructSet(mnode);
                 }
             } else {
+                Object obj = Constructor.this.newInstance(mnode);
                 if (node.isTwoStepsConstruction()) {
-                    return createEmptyJavaBean(mnode);
+                    return obj;
                 } else {
-                    return constructJavaBean2ndStep(mnode, createEmptyJavaBean(mnode));
+                    return constructJavaBean2ndStep(mnode, obj);
                 }
             }
         }
@@ -202,24 +152,31 @@ public class Constructor extends SafeConstructor {
             }
         }
 
-        protected Object createEmptyJavaBean(MappingNode node) {
-            try {
-                /**
-                 * Using only default constructor. Everything else will be
-                 * initialized on 2nd step. If we do here some partial
-                 * initialization, how do we then track what need to be done on
-                 * 2nd step? I think it is better to get only object here (to
-                 * have it as reference for recursion) and do all other thing on
-                 * 2nd step.
-                 */
-                java.lang.reflect.Constructor<?> c = node.getType().getDeclaredConstructor();
-                c.setAccessible(true);
-                return c.newInstance();
-            } catch (Exception e) {
-                throw new YAMLException(e);
-            }
-        }
+        // protected Object createEmptyJavaBean(MappingNode node) {
+        // try {
+        // Object instance = Constructor.this.newInstance(node);
+        // if (instance != null) {
+        // return instance;
+        // }
+        //
+        // /**
+        // * Using only default constructor. Everything else will be
+        // * initialized on 2nd step. If we do here some partial
+        // * initialization, how do we then track what need to be done on
+        // * 2nd step? I think it is better to get only object here (to
+        // * have it as reference for recursion) and do all other thing on
+        // * 2nd step.
+        // */
+        // java.lang.reflect.Constructor<?> c =
+        // node.getType().getDeclaredConstructor();
+        // c.setAccessible(true);
+        // return c.newInstance();
+        // } catch (Exception e) {
+        // throw new YAMLException(e);
+        // }
+        // }
 
+        @SuppressWarnings("unchecked")
         protected Object constructJavaBean2ndStep(MappingNode node, Object object) {
             flattenMapping(node);
             Class<? extends Object> beanType = node.getType();
@@ -237,35 +194,18 @@ public class Constructor extends SafeConstructor {
                 keyNode.setType(String.class);
                 String key = (String) constructObject(keyNode);
                 try {
-                    Property property = getProperty(beanType, key);
-                    valueNode.setType(property.getType());
                     TypeDescription memberDescription = typeDefinitions.get(beanType);
-                    boolean typeDetected = false;
-                    if (memberDescription != null) {
-                        switch (valueNode.getNodeId()) {
-                        case sequence:
-                            SequenceNode snode = (SequenceNode) valueNode;
-                            Class<? extends Object> memberType = memberDescription
-                                    .getListPropertyType(key);
-                            if (memberType != null) {
-                                snode.setListType(memberType);
-                                typeDetected = true;
-                            } else if (property.getType().isArray()) {
-                                snode.setListType(property.getType().getComponentType());
-                                typeDetected = true;
-                            }
-                            break;
-                        case mapping:
-                            MappingNode mnode = (MappingNode) valueNode;
-                            Class<? extends Object> keyType = memberDescription.getMapKeyType(key);
-                            if (keyType != null) {
-                                mnode.setTypes(keyType, memberDescription.getMapValueType(key));
-                                typeDetected = true;
-                            }
-                            break;
-                        default: // scalar
-                        }
+                    Property property = memberDescription == null ? getProperty(beanType, key)
+                            : memberDescription.getProperty(key);
+
+                    if (!property.isWritable()) {
+                        throw new YAMLException("No writable property '" + key + "' on class: "
+                                + beanType.getName());
                     }
+
+                    valueNode.setType(property.getType());
+                    final boolean typeDetected = (memberDescription != null) ? memberDescription
+                            .setupPropertyType(key, valueNode) : false;
                     if (!typeDetected && valueNode.getNodeId() != NodeId.scalar) {
                         // only if there is no explicit TypeDescription
                         Class<?>[] arguments = property.getActualTypeArguments();
@@ -281,20 +221,22 @@ public class Constructor extends SafeConstructor {
                                 MappingNode mnode = (MappingNode) valueNode;
                                 mnode.setOnlyKeyType(t);
                                 mnode.setUseClassConstructor(true);
-                            } else if (property.getType().isAssignableFrom(Map.class)) {
+                            } else if (Map.class.isAssignableFrom(valueNode.getType())) {
                                 Class<?> ketType = arguments[0];
                                 Class<?> valueType = arguments[1];
                                 MappingNode mnode = (MappingNode) valueNode;
                                 mnode.setTypes(ketType, valueType);
                                 mnode.setUseClassConstructor(true);
-                            } else {
-                                // the type for collection entries cannot be
-                                // detected
                             }
                         }
                     }
-                    Object value = constructObject(valueNode);
-                    property.set(object, value);
+
+                    Object value = (memberDescription != null) ? newInstance(memberDescription,
+                            key, valueNode) : constructObject(valueNode);
+                    if (memberDescription == null
+                            || !memberDescription.setProperty(object, key, value)) {
+                        property.set(object, value);
+                    }
                 } catch (Exception e) {
                     throw new ConstructorException("Cannot create property=" + key
                             + " for JavaBean=" + object, node.getStartMark(), e.getMessage(),
@@ -304,8 +246,16 @@ public class Constructor extends SafeConstructor {
             return object;
         }
 
-        protected Property getProperty(Class<? extends Object> type, String name)
-                throws IntrospectionException {
+        private Object newInstance(TypeDescription memberDescription, String propertyName, Node node) {
+            Object newInstance = memberDescription.newInstance(propertyName, node);
+            if (newInstance != null) {
+                constructedObjects.put(node, newInstance);
+                return constructObjectNoCheck(node);
+            }
+            return constructObject(node);
+        }
+
+        protected Property getProperty(Class<? extends Object> type, String name) {
             return getPropertyUtils().getProperty(type, name);
         }
     }
@@ -411,8 +361,8 @@ public class Constructor extends SafeConstructor {
         }
 
         @SuppressWarnings("unchecked")
-        private Object constructStandardJavaInstance(@SuppressWarnings("rawtypes")
-        Class type, ScalarNode node) {
+        private Object constructStandardJavaInstance(@SuppressWarnings("rawtypes") Class type,
+                ScalarNode node) {
             Object result;
             if (type == String.class) {
                 Construct stringConstructor = yamlConstructors.get(Tag.STR);
@@ -507,7 +457,7 @@ public class Constructor extends SafeConstructor {
                 }
             } else if (Collection.class.isAssignableFrom(node.getType())) {
                 if (node.isTwoStepsConstruction()) {
-                    return createDefaultList(snode.getValue().size());
+                    return newList(snode);
                 } else {
                     return constructSequence(snode);
                 }

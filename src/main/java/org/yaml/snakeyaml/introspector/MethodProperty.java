@@ -45,6 +45,10 @@ public class MethodProperty extends GenericProperty {
 
     @Override
     public void set(Object object, Object value) throws Exception {
+        if (!writable) {
+            throw new YAMLException("No writable property '" + getName() + "' on class: "
+                    + object.getClass().getName());
+        }
         property.getWriteMethod().invoke(object, value);
     }
 
