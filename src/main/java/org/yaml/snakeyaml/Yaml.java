@@ -658,4 +658,9 @@ public class Yaml {
         representer.getPropertyUtils().setBeanAccess(beanAccess);
     }
 
+    public void addTypeDescription(TypeDescription td) {
+        constructor.addTypeDescription(td);
+        representer.addTypeDescription(td);
+    }
+
 }
