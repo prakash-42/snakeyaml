@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2008, http://www.snakeyaml.org
+ * Copyright (c) 2008-2011, http://www.snakeyaml.org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,19 +13,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.yaml.snakeyaml.issues.issue150;
 
-public class Wheel {
-    private Integer id;
+package org.yaml.snakeyaml;
 
-    public Wheel() {
+import java.util.LinkedHashMap;
+
+public class EnumBeanGen<T extends Enum<T>> {
+    private int id;
+    private Enum<T> suit;
+    private LinkedHashMap<T, Integer> map = new LinkedHashMap<T, Integer>();
+
+    public LinkedHashMap<T, Integer> getMap() {
+        return map;
     }
 
-    public Integer getId() {
+    public void setMap(LinkedHashMap<T, Integer> map) {
+        this.map = map;
+    }
+
+    public int getId() {
         return id;
     }
 
-    public void setId(Integer id) {
+    public void setId(int id) {
         this.id = id;
+    }
+
+    public Enum<T> getSuit() {
+        return suit;
+    }
+
+    public void setSuit(T suit) {
+        this.suit = suit;
     }
 }
