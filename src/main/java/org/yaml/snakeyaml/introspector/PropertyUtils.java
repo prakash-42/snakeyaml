@@ -33,6 +33,7 @@ import java.util.TreeSet;
 import java.util.logging.Logger;
 
 import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.util.PlatformFeatureDetector;
 
 public class PropertyUtils {
 
@@ -43,6 +44,24 @@ public class PropertyUtils {
     private BeanAccess beanAccess = BeanAccess.DEFAULT;
     private boolean allowReadOnlyProperties = false;
     private boolean skipMissingProperties = false;
+
+    private PlatformFeatureDetector platformFeatureDetector;
+
+    public PropertyUtils() {
+        this(new PlatformFeatureDetector());
+    }
+
+    PropertyUtils(PlatformFeatureDetector platformFeatureDetector) {
+        this.platformFeatureDetector = platformFeatureDetector;
+
+        /*
+         * Android lacks much of java.beans (including the Introspector class, used here), because java.beans classes tend to rely on java.awt, which isn't
+         * supported in the Android SDK. That means we have to fall back on FIELD access only when SnakeYAML is running on the Android Runtime.
+         */
+        if (platformFeatureDetector.isRunningOnAndroid()) {
+            beanAccess = BeanAccess.FIELD;
+        }
+    }
 
     protected Map<String, Property> getPropertiesMap(Class<?> type, BeanAccess bAccess) {
         if (propertiesCache.containsKey(type)) {
@@ -78,20 +97,20 @@ public class PropertyUtils {
                 throw new YAMLException(e);
             }
 
-            // add public fields
-            for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-                for (Field field : c.getDeclaredFields()) {
-                    int modifiers = field.getModifiers();
-                    if (!Modifier.isStatic(modifiers) && !Modifier.isTransient(modifiers)) {
-                        if (Modifier.isPublic(modifiers)) {
-                            properties.put(field.getName(), new FieldProperty(field));
-                        } else {
-                            inaccessableFieldsExist = true;
+                // add public fields
+                for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+                    for (Field field : c.getDeclaredFields()) {
+                        int modifiers = field.getModifiers();
+                        if (!Modifier.isStatic(modifiers) && !Modifier.isTransient(modifiers)) {
+                            if (Modifier.isPublic(modifiers)) {
+                                properties.put(field.getName(), new FieldProperty(field));
+                            } else {
+                                inaccessableFieldsExist = true;
+                            }
                         }
                     }
                 }
-            }
-            break;
+                break;
         }
         if (properties.isEmpty() && inaccessableFieldsExist) {
             throw new YAMLException("No JavaBean properties found in " + type.getName());
@@ -174,6 +193,10 @@ public class PropertyUtils {
     }
 
     public void setBeanAccess(BeanAccess beanAccess) {
+        if (platformFeatureDetector.isRunningOnAndroid() && beanAccess != BeanAccess.FIELD) {
+            throw new IllegalArgumentException("JVM is Android - only BeanAccess.FIELD is available");
+        }
+
         if (this.beanAccess != beanAccess) {
             this.beanAccess = beanAccess;
             propertiesCache.clear();
