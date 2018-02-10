@@ -26,6 +26,7 @@ import java.util.TreeSet;
 
 import junit.framework.TestCase;
 
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.introspector.BeanAccess;
 import org.yaml.snakeyaml.introspector.Property;
@@ -123,7 +124,7 @@ public class FlexibleScalarStylesInJavaBeanTest extends TestCase {
                     if (bean.getNumbers().size() < 5) {
                         SequenceNode n = (SequenceNode) standard.getValueNode();
                         return new NodeTuple(standard.getKeyNode(), new SequenceNode(n.getTag(),
-                                true, n.getValue(), n.getStartMark(), n.getEndMark(), false));
+                                true, n.getValue(), n.getStartMark(), n.getEndMark(), DumperOptions.FlowStyle.BLOCK));
                     }
                 }
                 if (property.getName().equals("description")) {
@@ -132,7 +133,7 @@ public class FlexibleScalarStylesInJavaBeanTest extends TestCase {
                     if (bean.getDescription().indexOf(':') > 0) {
                         ScalarNode n = (ScalarNode) standard.getValueNode();
                         return new NodeTuple(standard.getKeyNode(), new ScalarNode(n.getTag(),
-                                n.getValue(), n.getStartMark(), n.getEndMark(), '>'));
+                                n.getValue(), n.getStartMark(), n.getEndMark(),  DumperOptions.ScalarStyle.FOLDED));
                     }
                 }
                 return standard;
