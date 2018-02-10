@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.DumperOptions.Version;
 import org.yaml.snakeyaml.error.Mark;
 import org.yaml.snakeyaml.error.YAMLException;
@@ -425,7 +426,7 @@ public class ParserImpl implements Parser {
             if (indentlessSequence && scanner.checkToken(Token.ID.BlockEntry)) {
                 endMark = scanner.peekToken().getEndMark();
                 event = new SequenceStartEvent(anchor, tag, implicit, startMark, endMark,
-                        Boolean.FALSE);
+                        DumperOptions.FlowStyle.BLOCK);
                 state = new ParseIndentlessSequenceEntry();
             } else {
                 if (scanner.checkToken(Token.ID.Scalar)) {
@@ -440,33 +441,33 @@ public class ParserImpl implements Parser {
                         implicitValues = new ImplicitTuple(false, false);
                     }
                     event = new ScalarEvent(anchor, tag, implicitValues, token.getValue(),
-                            startMark, endMark, token.getStyle().getChar());
+                            startMark, endMark, token.getStyle());
                     state = states.pop();
                 } else if (scanner.checkToken(Token.ID.FlowSequenceStart)) {
                     endMark = scanner.peekToken().getEndMark();
                     event = new SequenceStartEvent(anchor, tag, implicit, startMark, endMark,
-                            Boolean.TRUE);
+                            DumperOptions.FlowStyle.FLOW);
                     state = new ParseFlowSequenceFirstEntry();
                 } else if (scanner.checkToken(Token.ID.FlowMappingStart)) {
                     endMark = scanner.peekToken().getEndMark();
                     event = new MappingStartEvent(anchor, tag, implicit, startMark, endMark,
-                            Boolean.TRUE);
+                            DumperOptions.FlowStyle.FLOW);
                     state = new ParseFlowMappingFirstKey();
                 } else if (block && scanner.checkToken(Token.ID.BlockSequenceStart)) {
                     endMark = scanner.peekToken().getStartMark();
                     event = new SequenceStartEvent(anchor, tag, implicit, startMark, endMark,
-                            Boolean.FALSE);
+                            DumperOptions.FlowStyle.BLOCK);
                     state = new ParseBlockSequenceFirstEntry();
                 } else if (block && scanner.checkToken(Token.ID.BlockMappingStart)) {
                     endMark = scanner.peekToken().getStartMark();
                     event = new MappingStartEvent(anchor, tag, implicit, startMark, endMark,
-                            Boolean.FALSE);
+                            DumperOptions.FlowStyle.BLOCK);
                     state = new ParseBlockMappingFirstKey();
                 } else if (anchor != null || tag != null) {
                     // Empty scalars are allowed even if a tag or an anchor is
                     // specified.
                     event = new ScalarEvent(anchor, tag, new ImplicitTuple(implicit, false), "",
-                            startMark, endMark, (char) 0);
+                            startMark, endMark, DumperOptions.ScalarStyle.PLAIN);
                     state = states.pop();
                 } else {
                     String node;
@@ -639,7 +640,7 @@ public class ParserImpl implements Parser {
                 if (scanner.checkToken(Token.ID.Key)) {
                     Token token = scanner.peekToken();
                     Event event = new MappingStartEvent(null, null, true, token.getStartMark(),
-                            token.getEndMark(), Boolean.TRUE);
+                            token.getEndMark(), DumperOptions.FlowStyle.FLOW);
                     state = new ParseFlowSequenceEntryMappingKey();
                     return event;
                 } else if (!scanner.checkToken(Token.ID.FlowSequenceEnd)) {
@@ -789,6 +790,6 @@ public class ParserImpl implements Parser {
      * </pre>
      */
     private Event processEmptyScalar(Mark mark) {
-        return new ScalarEvent(null, null, new ImplicitTuple(true, false), "", mark, mark, (char) 0);
+        return new ScalarEvent(null, null, new ImplicitTuple(true, false), "", mark, mark, DumperOptions.ScalarStyle.PLAIN);
     }
 }
