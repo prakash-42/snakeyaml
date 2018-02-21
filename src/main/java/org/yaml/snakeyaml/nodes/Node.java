@@ -69,9 +69,6 @@ public abstract class Node {
     }
 
     /**
-     * For error reporting.
-     * 
-     * @see "class variable 'id' in PyYAML"
      * @return scalar, sequence, mapping
      */
     public abstract NodeId getNodeId();
@@ -137,7 +134,7 @@ public abstract class Node {
 
     public boolean useClassConstructor() {
         if (useClassConstructor == null) {
-            if (!tag.isSecondary() && isResolved() && !Object.class.equals(type)
+            if (!tag.isSecondary() && resolved && !Object.class.equals(type)
                     && !tag.equals(Tag.NULL)) {
                 return true;
             } else if (tag.isCompatible(getType())) {
@@ -154,15 +151,4 @@ public abstract class Node {
     public void setUseClassConstructor(Boolean useClassConstructor) {
         this.useClassConstructor = useClassConstructor;
     }
-
-    /**
-     * Indicates if the tag was added by
-     * {@link org.yaml.snakeyaml.resolver.Resolver}.
-     * 
-     * @return <code>true</code> if the tag of this node was resolved
-     */
-    public boolean isResolved() {
-        return resolved;
-    }
-
 }
