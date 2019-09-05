@@ -26,7 +26,7 @@ public final class ScalarEvent extends NodeEvent {
     // style flag of a scalar event indicates the style of the scalar. Possible
     // values are None, '', '\'', '"', '|', '>'
     private final DumperOptions.ScalarStyle style;
-    private final String value;
+    private String value;
     // The implicit flag of a scalar event is a pair of boolean values that
     // indicate if the tag may be omitted when the scalar is emitted in a plain
     // and non-plain style correspondingly.
@@ -106,6 +106,10 @@ public final class ScalarEvent extends NodeEvent {
      */
     public String getValue() {
         return this.value;
+    }
+
+    public void setValue(String value) {
+        this.value = value;
     }
 
     public ImplicitTuple getImplicit() {
